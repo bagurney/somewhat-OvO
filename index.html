@@ -1,0 +1,1359 @@
+   <!DOCTYPE html>
+<html>
+<head>
+  <title>Advanced Stick Figure Platformer</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: #333;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      font-family: Arial, sans-serif;
+    }
+    
+    #game-container {
+      position: relative;
+      width: 800px;
+      height: 400px;
+      background-color: #87CEEB;
+      overflow: hidden;
+      border: 3px solid #000;
+    }
+    
+    #player {
+      position: absolute;
+      width: 20px;
+      height: 40px;
+      background-color: transparent;
+      z-index: 10;
+    }
+    
+    #level {
+      position: absolute;
+      top: 0;
+      left: 0;
+      transition: left 0.1s linear;
+    }
+    
+    .platform {
+      position: absolute;
+      background-color: #8B4513;
+      border-top: 2px solid #A0522D;
+    }
+    
+    .spike {
+ position: absolute;
+      width: 0;
+      height: 0;
+      border-left: 10px solid transparent;
+      border-right: 10px solid transparent;
+      border-bottom: 20px solid #FF0000;
+    }
+    
+    .spike.small {
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      border-bottom: 10px solid #FF0000;
+    }
+    
+    .spike.large {
+      border-left: 15px solid transparent;
+      border-right: 15px solid transparent;
+      border-bottom: 30px solid #FF0000;
+    }
+    
+    .hole {
+      position: absolute;
+      background-color: #333;
+    }
+    
+    #flag {
+      position: absolute;
+      width: 10px;
+      height: 40px;
+      background-color: #8B4513;
+    }
+    
+    #flag:after {
+      content: '';
+      position: absolute;
+      top: 5px;
+      left: 10px;
+      width: 20px;
+      height: 15px;
+      background-color: #FF0000;
+    }
+    
+    .game-ui {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: white;
+      font-weight: bold;
+      text-shadow: 1px 1px 2px black;
+      z-index: 20;
+    }
+    
+    #game-over-screen, #win-screen, #start-screen {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.7);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: white;
+      font-size: 24px;
+      z-index: 30;
+    }
+    
+    button {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 16px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    
+    button:hover {
+      background-color: #45a049;
+    }
+    
+    #controls-info {
+      font-size: 16px;
+      margin-top: 10px;
+      text-align: center;
+    }
+    
+    #action-indicator {
+      position: absolute;
+      top: 40px;
+      left: 10px;
+      color: white;
+      font-weight: bold;
+      text-shadow: 1px 1px 2px black;
+      font-size: 14px;
+      z-index: 20;
+      opacity: 0;
+      transition: opacity 0.5s;
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <div id="level"></div>
+    <div id="player"></div>
+    <div class="game-ui">
+      Deaths: <span id="death-counter">0</span>
+    </div>
+    <div id="action-indicator">SLIDING</div>
+    <div id="start-screen">
+      <h2>Advanced Stick Figure Platformer</h2>
+      <p>Reach the red flag at the end of the level to win!</p>
+      <div id="controls-info">
+        Move: WASD or Arrow Keys<br>
+        Jump: W, Up Arrow, or Space<br>
+        Slide: S or Down Arrow while moving<br>
+        Dive: S or Down Arrow while jumping
+      </div>
+      <button id="start-button">Start Game</button>
+    </div>
+    <div id="game-over-screen" style="display: none;">
+      <h2>Game Over!</h2>
+      <button id="restart-button">Try Again</button>
+    </div>
+    <div id="win-screen" style="display: none;">
+      <h2>You Win!</h2>
+      <p>Deaths: <span id="final-deaths">0</span></p>
+      <button id="play-again-button">Play Again</button>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Game elements
+      const gameContainer = document.getElementById('game-container');
+      const levelContainer = document.getElementById('level');
+      const player = document.getElementById('player');
+      const deathCounter = document.getElementById('death-counter');
+      const gameOverScreen = document.getElementById('game-over-screen');
+      const winScreen = document.getElementById('win-screen');
+      const startScreen = document.getElementById('start-screen');
+      const startButton = document.getElementById('start-button');
+      const restartButton = document.getElementById('restart-button');
+      const playAgainButton = document.getElementById('play-again-button');
+      const finalDeaths = document.getElementById('final-deaths');
+      const actionIndicator = document.getElementById('action-indicator');
+      
+      // Game state
+      let playerX = 50;
+      let playerY = 0;
+      let velocityX = 0;
+      let velocityY = 0;
+      let isJumping = false;
+      let isSliding = false;
+      let isDiving = false;
+      let deaths = 0;
+      let gameStarted = false;
+      let gameOver = false;
+      let gameWon = false;
+      let levelOffset = 0;
+      let levelWidth = 3000; // Extended level length
+      
+      // Constants
+      const gravity = 0.5;
+      const playerSpeed = 5;
+      const slideSpeed = 8;
+      const jumpStrength = 12;
+      const groundY = 350;
+      const viewportWidth = 800;
+      const viewportHeight = 400;
+      
+      // Player dimensions and state
+      const normalHeight = 40;
+      const slideHeight = 20;
+      const normalWidth = 20;
+      const slideWidth = 30;
+      let playerHeight = normalHeight;
+      let playerWidth = normalWidth;
+      
+      // Draw stick figure
+      function drawStickFigure(state) {
+        if (state === 'normal') {
+          player.innerHTML = `
+            <svg width="20" height="40" viewBox="0 0 20 40" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="10" cy="5" r="5" fill="black"/>
+              <line x1="10" y1="10" x2="10" y2="25" stroke="black" stroke-width="2"/>
+              <line x1="10" y1="25" x2="5" y2="35" stroke="black" stroke-width="2"/>
+              <line x1="10" y1="25" x2="15" y2="35" stroke="black" stroke-width="2"/>
+              <line x1="0" y1="15" x2="20" y2="15" stroke="black" stroke-width="2"/>
+            </svg>
+          `;
+          playerHeight = normalHeight;
+          playerWidth = normalWidth;
+        } else if (state === 'sliding') {
+          player.innerHTML = `
+            <svg width="30" height="20" viewBox="0 0 30 20" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="5" cy="5" r="5" fill="black"/>
+              <line x1="5" y1="5" x2="25" y2="5" stroke="black" stroke-width="2"/>
+              <line x1="15" y1="5" x2="10" y2="15" stroke="black" stroke-width="2"/>
+              <line x1="15" y1="5" x2="20" y2="15" stroke="black" stroke-width="2"/>
+            </svg>
+          `;
+          playerHeight = slideHeight;
+          playerWidth = slideWidth;
+        } else if (state === 'diving') {
+          player.innerHTML = `
+            <svg width="20" height="40" viewBox="0 0 20 40" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="10" cy="35" r="5" fill="black"/>
+              <line x1="10" y1="30" x2="10" y2="15" stroke="black" stroke-width="2"/>
+              <line x1="10" y1="15" x2="5" y2="5" stroke="black" stroke-width="2"/>
+              <line x1="10" y1="15" x2="15" y2="5" stroke="black" stroke-width="2"/>
+              <line x1="0" y1="25" x2="20" y2="25" stroke="black" stroke-width="2"/>
+            </svg>
+          `;
+          playerHeight = normalHeight;
+          playerWidth = normalWidth;
+        }
+      }
+      
+      // Level design - extended with more platforms and obstacles
+      const platforms = [
+        // Starting area
+        { x: 0, y: groundY, width: 300, height: 50 },
+        
+        // First gap
+        { x: 400, y: groundY, width: 200, height: 50 },
+        
+        // Platform sequence
+        { x: 700, y: groundY, width: 100, height: 50 },
+        { x: 900, y: groundY, width: 150, height: 50 },
+        { x: 900, y: 280, width: 80, height: 20 },
+        { x: 1100, y: groundY, width: 200, height: 50 },
+        
+        // Elevated section
+        { x: 1400, y: groundY - 50, width: 100, height: 100 },
+        { x: 1550, y: groundY - 50, width: 50, height: 100 },
+        { x: 1650, y: groundY - 80, width: 50, height: 130 },
+        { x: 1750, y: groundY - 80, width: 150, height: 130 },
+        
+        // Dive training section
+        { x: 2000, y: groundY, width: 100, height: 50 },
+        { x: 2200, y: groundY - 30, width: 100, height: 80 },
+        { x: 2400, y: groundY, width: 150, height: 50 },
+        
+        // Final approach
+        { x: 2600, y: 300, width: 50, height: 20 },
+        { x: 2700, y: 250, width: 50, height: 20 },
+        { x: 2800, y: 200, width: 200, height: 20 }
+      ];
+      
+      const spikes = [
+        // Normal spikes
+        { x: 350, y: groundY - 20, size: 'normal' },
+        { x: 650, y: groundY - 20, size: 'normal' },
+        { x: 830, y: groundY - 20, size: 'normal' },
+        
+        // Small spikes (for sliding under)
+        { x: 1020, y: groundY - 30, size: 'large' },
+        { x: 1060, y: groundY - 30, size: 'large' },
+        
+        // Mixed spike sizes
+        { x: 1300, y: groundY - 10, size: 'small' },
+        { x: 1320, y: groundY - 10, size: 'small' },
+        { x: 1340, y: groundY - 10, size: 'small' },
+        { x: 1360, y: groundY - 10, size: 'small' },
+        
+        // Elevation section
+        { x: 1510, y: groundY - 70, size: 'normal' },
+        { x: 1610, y: groundY - 100, size: 'normal' },
+        
+        // Dive training section
+        { x: 2150, y: groundY - 20, size: 'normal' },
+        { x: 2350, y: groundY - 50, size: 'large' },
+        
+        // Final approach
+        { x: 2550, y: groundY - 20, size: 'normal' },
+        { x: 2650, y: 300 - 20, size: 'small' },
+        { x: 2750, y: 250 - 10, size: 'small' }
+      ];
+      
+      const holes = [
+        { x: 300, y: groundY, width: 100, height: 50 },
+        { x: 600, y: groundY, width: 100, height: 50 },
+        { x: 800, y: groundY, width: 100, height: 50 },
+        { x: 1050, y: groundY, width: 50, height: 50 },
+        { x: 1300, y: groundY, width: 100, height: 50 },
+        { x: 1500, y: groundY - 50, width: 50, height: 100 },
+        { x: 1600, y: groundY - 80, width: 50, height: 130 },
+        { x: 1900, y: groundY - 80, width: 100, height: 130 },
+        { x: 2100, y: groundY, width: 100, height: 50 },
+        { x: 2300, y: groundY - 30, width: 100, height: 80 },
+        { x: 2550, y: groundY, width: 250, height: 50 }
+      ];
+      
+      // Flag (finish line) - positioned at the end of the level
+      const flag = { x: 2950, y: 200 - 40 };
+      
+      // Create level elements
+      function createLevel() {
+        // Create platforms
+        platforms.forEach(platform => {
+          const platformElement = document.createElement('div');
+          platformElement.className = 'platform';
+          platformElement.style.left = platform.x + 'px';
+          platformElement.style.top = platform.y + 'px';
+          platformElement.style.width = platform.width + 'px';
+          platformElement.style.height = platform.height + 'px';
+          levelContainer.appendChild(platformElement);
+        });
+        
+        // Create spikes with different sizes
+        spikes.forEach(spike => {
+          const spikeElement = document.createElement('div');
+          spikeElement.className = `spike ${spike.size}`;
+          spikeElement.style.left = spike.x + 'px';
+          spikeElement.style.top = spike.y + 'px';
+          levelContainer.appendChild(spikeElement);
+        });
+        
+        // Create holes
+        holes.forEach(hole => {
+          const holeElement = document.createElement('div');
+          holeElement.className = 'hole';
+          holeElement.style.left = hole.x + 'px';
+          holeElement.style.top = hole.y + 'px';
+          holeElement.style.width = hole.width + 'px';
+          holeElement.style.height = hole.height + 'px';
+          levelContainer.appendChild(holeElement);
+        });
+        
+        // Create flag
+        const flagElement = document.createElement('div');
+        flagElement.id = 'flag';
+        flagElement.style.left = flag.x + 'px';
+        flagElement.style.top = flag.y + 'px';
+        levelContainer.appendChild(flagElement);
+      }
+      
+      // Show action indicator
+      function showActionIndicator(text) {
+        actionIndicator.textContent = text;
+        actionIndicator.style.opacity = 1;
+        
+        setTimeout(() => {
+          actionIndicator.style.opacity = 0;
+        }, 1000);
+      }
+      
+      // Check collisions
+      function checkCollision() {
+        const playerRect = {
+          x: playerX,
+          y: playerY,
+          width: playerWidth,
+          height: playerHeight
+        };
+        
+        // Check platform collisions
+        let onPlatform = false;
+        for (const platform of platforms) {
+          if (playerRect.x + playerRect.width > platform.x && 
+              playerRect.x < platform.x + platform.width &&
+              playerRect.y + playerRect.height > platform.y && 
+              playerRect.y + playerRect.height < platform.y + 10) {
+            if (!isSliding && !isDiving) {
+              playerY = platform.y - playerRect.height;
+              velocityY = 0;
+              isJumping = false;
+              onPlatform = true;
+            } else if (isSliding) {
+              playerY = platform.y - playerRect.height;
+              velocityY = 0;
+              isJumping = false;
+              onPlatform = true;
+            } else if (isDiving) {
+              // End diving when hitting a platform
+              isDiving = false;
+              isJumping = false;
+              playerY = platform.y - normalHeight;
+              velocityY = 0;
+              drawStickFigure('normal');
+              onPlatform = true;
+            }
+          }
+        }
+        
+        // Check spike collisions
+        for (const spike of spikes) {
+          let spikeWidth, spikeHeight;
+          if (spike.size === 'small') {
+            spikeWidth = 10;
+            spikeHeight = 10;
+          } else if (spike.size === 'large') {
+            spikeWidth = 30;
+            spikeHeight = 30;
+          } else {
+            spikeWidth = 20;
+            spikeHeight = 20;
+          }
+          
+          if (playerRect.x + playerRect.width > spike.x && 
+              playerRect.x < spike.x + spikeWidth &&
+              playerRect.y + playerRect.height > spike.y) {
+            
+            // Check if sliding under large spikes
+            if (isSliding && spike.size === 'large' && 
+                playerRect.y + playerRect.height > spike.y + spikeHeight * 0.5) {
+              // Successfully slid under the spike
+              continue;
+            }
+            
+            resetPlayer();
+            return false;
+          }
+        }
+        
+        // Check hole collisions (falling)
+        if (playerRect.y + playerRect.height > groundY + 30) {
+          resetPlayer();
+          return false;
+        }
+        
+        // Check flag collision (win)
+        if (playerRect.x + playerRect.width > flag.x && 
+            playerRect.x < flag.x + 30 &&
+            playerRect.y + playerRect.height > flag.y) {
+          gameWon = true;
+        }
+        
+        return onPlatform;
+      }
+      
+      // Reset player after death
+      function resetPlayer() {
+        playerX = 50;
+        playerY = 0;
+        velocityX = 0;
+        velocityY = 0;
+        isJumping = false;
+        isSliding = false;
+        isDiving = false;
+        deaths++;
+        levelOffset = 0;
+        levelContainer.style.left = '0px';
+        deathCounter.textContent = deaths;
+        drawStickFigure('normal');
+      }
+      
+      // Update camera/viewport
+      function updateViewport() {
+        const playerViewportX = playerX - levelOffset;
+        
+        // Move the viewport right if player approaches right edge
+        if (playerViewportX > viewportWidth * 0.6 && levelOffset < levelWidth - viewportWidth) {
+          levelOffset = playerX - (viewportWidth * 0.6);
+        }
+        
+        // Move the viewport left if player approaches left edge
+        if (playerViewportX < viewportWidth * 0.3 && levelOffset > 0) {
+          levelOffset = playerX - (viewportWidth * 0.3);
+        }
+        
+        // Clamp the level offset
+        levelOffset = Math.max(0, Math.min(levelWidth - viewportWidth, levelOffset));
+        
+        // Apply the transformation
+        levelContainer.style.left = -levelOffset + 'px';
+      }
+      
+      // Handle keyboard input
+      const keys = {};
+      
+      window.addEventListener('keydown', function(e) {
+        keys[e.key] = true;
+        
+        // Prevent default scrolling behavior
+        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
+          e.preventDefault();
+        }
+        
+        // Jump
+        if ((e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W' || e.key === ' ') && 
+            !isJumping && !isSliding && gameStarted && !gameOver && !gameWon) {
+          velocityY = -jumpStrength;
+          isJumping = true;
+          drawStickFigure('normal');
+        }
+        
+        // Slide
+        if ((e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') && 
+            !isJumping && !isSliding && gameStarted && !gameOver && !gameWon) {
+          isSliding = true;
+          drawStickFigure('sliding');
+          showActionIndicator('SLIDING');
+        }
+        
+        // Dive (pressing down while jumping)
+        if ((e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') && 
+            isJumping && !isDiving && gameStarted && !gameOver && !gameWon) {
+          isDiving = true;
+          isJumping = true;
+          velocityY = 15; // Fast downward velocity
+          drawStickFigure('diving');
+          showActionIndicator('DIVING');
+        }
+      });
+      
+      window.addEventListener('keyup', function(e) {
+        keys[e.key] = false;
+        
+        // End sliding when key is released
+        if ((e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') && isSliding) {
+          isSliding = false;
+          drawStickFigure('normal');
+        }
+      });
+      
+      // Main game loop
+      function gameLoop() {
+        if (!gameStarted || gameOver || gameWon) return;
+        
+        // Handle horizontal movement
+        velocityX = 0;
+        if ((keys['ArrowLeft'] || keys['a'] || keys['A']) && playerX > 0) {
+          velocityX = isSliding ? -slideSpeed : -playerSpeed;
+        }
+        if ((keys['ArrowRight'] || keys['d'] || keys['D']) && playerX < levelWidth - playerWidth) {
+          velocityX = isSliding ? slideSpeed : playerSpeed;
+        }
+        
+        // Apply gravity if jumping or falling
+        if (isJumping || isDiving) {
+          velocityY += gravity;
+        }
+        
+        // Update position
+        playerX += velocityX;
+        playerY += velocityY;
+        
+        // Check boundaries
+        if (playerX < 0) playerX = 0;
+        if (playerX > levelWidth - playerWidth) playerX = levelWidth - playerWidth;
+        
+        // Check collisions
+        const onPlatform = checkCollision();
+        
+        // End diving if on ground
+        if (isDiving && onPlatform) {
+          isDiving = false;
+          drawStickFigure('normal');
+        }
+        
+        // End sliding if not pressing down
+        if (isSliding && !keys['ArrowDown'] && !keys['s'] && !keys['S']) {
+          isSliding = false;
+          drawStickFigure('normal');
+        }
+        
+        // Update viewport/camera
+        updateViewport();
+        
+        // Update player position
+        player.style.left = (playerX - levelOffset) + 'px';
+        player.style.top = playerY + 'px';
+        
+        // Check for win
+        if (gameWon) {
+          winScreen.style.display = 'flex';
+          finalDeaths.textContent = deaths;
+          return;
+        }
+        
+        // Request next frame
+        requestAnimationFrame(gameLoop);
+      }
+      
+      // Initialize game
+      function initGame() {
+        // Clear existing elements
+        levelContainer.innerHTML = '';
+        
+        // Reset game state
+        playerX = 50;
+        playerY = 0;
+        velocityX = 0;
+        velocityY = 0;
+        isJumping = false;
+        isSliding = false;
+        isDiving = false;
+        deaths = 0;
+        gameOver = false;
+        gameWon = false;
+        levelOffset = 0;
+        deathCounter.textContent = deaths;
+        
+        // Draw player
+        drawStickFigure('normal');
+        
+        // Create level
+        createLevel();
+        
+        // Update viewport
+        updateViewport();
+        
+        // Start game loop
+        requestAnimationFrame(gameLoop);
+      }
+      
+      // Event listeners for buttons
+      startButton.addEventListener('click', function() {
+        startScreen.style.display = 'none';
+        gameStarted = true;
+        initGame();
+      });
+      
+      restartButton.addEventListener('click', function() {
+        gameOverScreen.style.display = 'none';
+        initGame();
+      });
+      
+      playAgainButton.addEventListener('click', function() {
+        winScreen.style.display = 'none';
+        initGame();
+      });
+      
+      // Draw initial stick figure
+      drawStickFigure('normal');
+    });
+  </script>
+</body>
+</html><!DOCTYPE html>
+<html>
+<head>
+  <title>Advanced Stick Figure Platformer</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: #333;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      font-family: Arial, sans-serif;
+    }
+    
+    #game-container {
+      position: relative;
+      width: 800px;
+      height: 400px;
+      background-color: #87CEEB;
+      overflow: hidden;
+      border: 3px solid #000;
+    }
+    
+    #player {
+      position: absolute;
+      width: 20px;
+      height: 40px;
+      background-color: transparent;
+      z-index: 10;
+    }
+    
+    #level {
+      position: absolute;
+      top: 0;
+      left: 0;
+      transition: left 0.1s linear;
+    }
+    
+    .platform {
+      position: absolute;
+      background-color: #8B4513;
+      border-top: 2px solid #A0522D;
+    }
+    
+    .spike {
+      position: absolute;
+      width: 0;
+      height: 0;
+      border-left: 10px solid transparent;
+      border-right: 10px solid transparent;
+      border-bottom: 20px solid #FF0000;
+    }
+    
+    .spike.small {
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      border-bottom: 10px solid #FF0000;
+    }
+    
+    .spike.large {
+      border-left: 15px solid transparent;
+      border-right: 15px solid transparent;
+      border-bottom: 30px solid #FF0000;
+    }
+    
+    .hole {
+      position: absolute;
+      background-color: #333;
+    }
+    
+    #flag {
+      position: absolute;
+      width: 10px;
+      height: 40px;
+      background-color: #8B4513;
+    }
+    
+    #flag:after {
+      content: '';
+      position: absolute;
+      top: 5px;
+      left: 10px;
+      width: 20px;
+      height: 15px;
+      background-color: #FF0000;
+    }
+    
+    .game-ui {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: white;
+      font-weight: bold;
+      text-shadow: 1px 1px 2px black;
+      z-index: 20;
+    }
+    
+    #game-over-screen, #win-screen, #start-screen {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.7);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: white;
+      font-size: 24px;
+      z-index: 30;
+    }
+    
+    button {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 16px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    
+    button:hover {
+      background-color: #45a049;
+    }
+    
+    #controls-info {
+      font-size: 16px;
+      margin-top: 10px;
+      text-align: center;
+    }
+    
+    #action-indicator {
+      position: absolute;
+      top: 40px;
+      left: 10px;
+      color: white;
+      font-weight: bold;
+      text-shadow: 1px 1px 2px black;
+      font-size: 14px;
+      z-index: 20;
+      opacity: 0;
+      transition: opacity 0.5s;
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <div id="level"></div>
+    <div id="player"></div>
+    <div class="game-ui">
+      Deaths: <span id="death-counter">0</span>
+    </div>
+    <div id="action-indicator">SLIDING</div>
+    <div id="start-screen">
+      <h2>Advanced Stick Figure Platformer</h2>
+      <p>Reach the red flag at the end of the level to win!</p>
+      <div id="controls-info">
+        Move: WASD or Arrow Keys<br>
+        Jump: W, Up Arrow, or Space<br>
+        Slide: S or Down Arrow while moving<br>
+        Dive: S or Down Arrow while jumping
+      </div>
+      <button id="start-button">Start Game</button>
+    </div>
+    <div id="game-over-screen" style="display: none;">
+      <h2>Game Over!</h2>
+      <button id="restart-button">Try Again</button>
+    </div>
+    <div id="win-screen" style="display: none;">
+      <h2>You Win!</h2>
+      <p>Deaths: <span id="final-deaths">0</span></p>
+      <button id="play-again-button">Play Again</button>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Game elements
+      const gameContainer = document.getElementById('game-container');
+      const levelContainer = document.getElementById('level');
+      const player = document.getElementById('player');
+      const deathCounter = document.getElementById('death-counter');
+      const gameOverScreen = document.getElementById('game-over-screen');
+      const winScreen = document.getElementById('win-screen');
+      const startScreen = document.getElementById('start-screen');
+      const startButton = document.getElementById('start-button');
+      const restartButton = document.getElementById('restart-button');
+      const playAgainButton = document.getElementById('play-again-button');
+      const finalDeaths = document.getElementById('final-deaths');
+      const actionIndicator = document.getElementById('action-indicator');
+      
+      // Game state
+      let playerX = 50;
+      let playerY = 0;
+      let velocityX = 0;
+      let velocityY = 0;
+      let isJumping = false;
+      let isSliding = false;
+      let isDiving = false;
+      let deaths = 0;
+      let gameStarted = false;
+      let gameOver = false;
+      let gameWon = false;
+      let levelOffset = 0;
+      let levelWidth = 3000; // Extended level length
+      
+      // Constants
+      const gravity = 0.5;
+      const playerSpeed = 5;
+      const slideSpeed = 8;
+      const jumpStrength = 12;
+      const groundY = 350;
+      const viewportWidth = 800;
+      const viewportHeight = 400;
+      
+      // Player dimensions and state
+      const normalHeight = 40;
+      const slideHeight = 20;
+      const normalWidth = 20;
+      const slideWidth = 30;
+      let playerHeight = normalHeight;
+      let playerWidth = normalWidth;
+      
+      // Draw stick figure
+      function drawStickFigure(state) {
+        if (state === 'normal') {
+          player.innerHTML = `
+            <svg width="20" height="40" viewBox="0 0 20 40" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="10" cy="5" r="5" fill="black"/>
+              <line x1="10" y1="10" x2="10" y2="25" stroke="black" stroke-width="2"/>
+              <line x1="10" y1="25" x2="5" y2="35" stroke="black" stroke-width="2"/>
+              <line x1="10" y1="25" x2="15" y2="35" stroke="black" stroke-width="2"/>
+              <line x1="0" y1="15" x2="20" y2="15" stroke="black" stroke-width="2"/>
+            </svg>
+          `;
+          playerHeight = normalHeight;
+          playerWidth = normalWidth;
+        } else if (state === 'sliding') {
+          player.innerHTML = `
+            <svg width="30" height="20" viewBox="0 0 30 20" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="5" cy="5" r="5" fill="black"/>
+              <line x1="5" y1="5" x2="25" y2="5" stroke="black" stroke-width="2"/>
+              <line x1="15" y1="5" x2="10" y2="15" stroke="black" stroke-width="2"/>
+              <line x1="15" y1="5" x2="20" y2="15" stroke="black" stroke-width="2"/>
+            </svg>
+          `;
+          playerHeight = slideHeight;
+          playerWidth = slideWidth;
+        } else if (state === 'diving') {
+          player.innerHTML = `
+            <svg width="20" height="40" viewBox="0 0 20 40" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="10" cy="35" r="5" fill="black"/>
+              <line x1="10" y1="30" x2="10" y2="15" stroke="black" stroke-width="2"/>
+              <line x1="10" y1="15" x2="5" y2="5" stroke="black" stroke-width="2"/>
+              <line x1="10" y1="15" x2="15" y2="5" stroke="black" stroke-width="2"/>
+              <line x1="0" y1="25" x2="20" y2="25" stroke="black" stroke-width="2"/>
+            </svg>
+          `;
+          playerHeight = normalHeight;
+          playerWidth = normalWidth;
+        }
+      }
+      
+      // Level design - extended with more platforms and obstacles
+      const platforms = [
+        // Starting area
+        { x: 0, y: groundY, width: 300, height: 50 },
+        
+        // First gap
+        { x: 400, y: groundY, width: 200, height: 50 },
+        
+        // Platform sequence
+        { x: 700, y: groundY, width: 100, height: 50 },
+        { x: 900, y: groundY, width: 150, height: 50 },
+        { x: 900, y: 280, width: 80, height: 20 },
+        { x: 1100, y: groundY, width: 200, height: 50 },
+        
+        // Elevated section
+        { x: 1400, y: groundY - 50, width: 100, height: 100 },
+        { x: 1550, y: groundY - 50, width: 50, height: 100 },
+        { x: 1650, y: groundY - 80, width: 50, height: 130 },
+        { x: 1750, y: groundY - 80, width: 150, height: 130 },
+        
+        // Dive training section
+        { x: 2000, y: groundY, width: 100, height: 50 },
+        { x: 2200, y: groundY - 30, width: 100, height: 80 },
+        { x: 2400, y: groundY, width: 150, height: 50 },
+        
+        // Final approach
+        { x: 2600, y: 300, width: 50, height: 20 },
+        { x: 2700, y: 250, width: 50, height: 20 },
+        { x: 2800, y: 200, width: 200, height: 20 }
+      ];
+      
+      const spikes = [
+        // Normal spikes
+        { x: 350, y: groundY - 20, size: 'normal' },
+        { x: 650, y: groundY - 20, size: 'normal' },
+        { x: 830, y: groundY - 20, size: 'normal' },
+        
+        // Small spikes (for sliding under)
+        { x: 1020, y: groundY - 30, size: 'large' },
+        { x: 1060, y: groundY - 30, size: 'large' },
+        
+        // Mixed spike sizes
+        { x: 1300, y: groundY - 10, size: 'small' },
+        { x: 1320, y: groundY - 10, size: 'small' },
+        { x: 1340, y: groundY - 10, size: 'small' },
+        { x: 1360, y: groundY - 10, size: 'small' },
+        
+        // Elevation section
+        { x: 1510, y: groundY - 70, size: 'normal' },
+        { x: 1610, y: groundY - 100, size: 'normal' },
+        
+        // Dive training section
+        { x: 2150, y: groundY - 20, size: 'normal' },
+        { x: 2350, y: groundY - 50, size: 'large' },
+        
+        // Final approach
+        { x: 2550, y: groundY - 20, size: 'normal' },
+        { x: 2650, y: 300 - 20, size: 'small' },
+        { x: 2750, y: 250 - 10, size: 'small' }
+      ];
+      
+      const holes = [
+        { x: 300, y: groundY, width: 100, height: 50 },
+        { x: 600, y: groundY, width: 100, height: 50 },
+        { x: 800, y: groundY, width: 100, height: 50 },
+        { x: 1050, y: groundY, width: 50, height: 50 },
+        { x: 1300, y: groundY, width: 100, height: 50 },
+        { x: 1500, y: groundY - 50, width: 50, height: 100 },
+        { x: 1600, y: groundY - 80, width: 50, height: 130 },
+        { x: 1900, y: groundY - 80, width: 100, height: 130 },
+        { x: 2100, y: groundY, width: 100, height: 50 },
+        { x: 2300, y: groundY - 30, width: 100, height: 80 },
+        { x: 2550, y: groundY, width: 250, height: 50 }
+      ];
+      
+      // Flag (finish line) - positioned at the end of the level
+      const flag = { x: 2950, y: 200 - 40 };
+      
+      // Create level elements
+      function createLevel() {
+        // Create platforms
+        platforms.forEach(platform => {
+          const platformElement = document.createElement('div');
+          platformElement.className = 'platform';
+          platformElement.style.left = platform.x + 'px';
+          platformElement.style.top = platform.y + 'px';
+          platformElement.style.width = platform.width + 'px';
+          platformElement.style.height = platform.height + 'px';
+          levelContainer.appendChild(platformElement);
+        });
+        
+        // Create spikes with different sizes
+        spikes.forEach(spike => {
+          const spikeElement = document.createElement('div');
+          spikeElement.className = `spike ${spike.size}`;
+          spikeElement.style.left = spike.x + 'px';
+          spikeElement.style.top = spike.y + 'px';
+          levelContainer.appendChild(spikeElement);
+        });
+        
+        // Create holes
+        holes.forEach(hole => {
+          const holeElement = document.createElement('div');
+          holeElement.className = 'hole';
+          holeElement.style.left = hole.x + 'px';
+          holeElement.style.top = hole.y + 'px';
+          holeElement.style.width = hole.width + 'px';
+          holeElement.style.height = hole.height + 'px';
+          levelContainer.appendChild(holeElement);
+        });
+        
+        // Create flag
+        const flagElement = document.createElement('div');
+        flagElement.id = 'flag';
+        flagElement.style.left = flag.x + 'px';
+        flagElement.style.top = flag.y + 'px';
+        levelContainer.appendChild(flagElement);
+      }
+      
+      // Show action indicator
+      function showActionIndicator(text) {
+        actionIndicator.textContent = text;
+        actionIndicator.style.opacity = 1;
+        
+        setTimeout(() => {
+          actionIndicator.style.opacity = 0;
+        }, 1000);
+      }
+      
+      // Check collisions
+      function checkCollision() {
+        const playerRect = {
+          x: playerX,
+          y: playerY,
+          width: playerWidth,
+          height: playerHeight
+        };
+        
+        // Check platform collisions
+        let onPlatform = false;
+        for (const platform of platforms) {
+          if (playerRect.x + playerRect.width > platform.x && 
+              playerRect.x < platform.x + platform.width &&
+              playerRect.y + playerRect.height > platform.y && 
+              playerRect.y + playerRect.height < platform.y + 10) {
+            if (!isSliding && !isDiving) {
+              playerY = platform.y - playerRect.height;
+              velocityY = 0;
+              isJumping = false;
+              onPlatform = true;
+            } else if (isSliding) {
+              playerY = platform.y - playerRect.height;
+              velocityY = 0;
+              isJumping = false;
+              onPlatform = true;
+            } else if (isDiving) {
+              // End diving when hitting a platform
+              isDiving = false;
+              isJumping = false;
+              playerY = platform.y - normalHeight;
+              velocityY = 0;
+              drawStickFigure('normal');
+              onPlatform = true;
+            }
+          }
+        }
+        
+        // Check spike collisions
+        for (const spike of spikes) {
+          let spikeWidth, spikeHeight;
+          if (spike.size === 'small') {
+            spikeWidth = 10;
+            spikeHeight = 10;
+          } else if (spike.size === 'large') {
+            spikeWidth = 30;
+            spikeHeight = 30;
+          } else {
+            spikeWidth = 20;
+            spikeHeight = 20;
+          }
+          
+          if (playerRect.x + playerRect.width > spike.x && 
+              playerRect.x < spike.x + spikeWidth &&
+              playerRect.y + playerRect.height > spike.y) {
+            
+            // Check if sliding under large spikes
+            if (isSliding && spike.size === 'large' && 
+                playerRect.y + playerRect.height > spike.y + spikeHeight * 0.5) {
+              // Successfully slid under the spike
+              continue;
+            }
+            
+            resetPlayer();
+            return false;
+          }
+        }
+        
+        // Check hole collisions (falling)
+        if (playerRect.y + playerRect.height > groundY + 30) {
+          resetPlayer();
+          return false;
+        }
+        
+        // Check flag collision (win)
+        if (playerRect.x + playerRect.width > flag.x && 
+            playerRect.x < flag.x + 30 &&
+            playerRect.y + playerRect.height > flag.y) {
+          gameWon = true;
+        }
+        
+        return onPlatform;
+      }
+      
+      // Reset player after death
+      function resetPlayer() {
+        playerX = 50;
+        playerY = 0;
+        velocityX = 0;
+        velocityY = 0;
+        isJumping = false;
+        isSliding = false;
+        isDiving = false;
+        deaths++;
+        levelOffset = 0;
+        levelContainer.style.left = '0px';
+        deathCounter.textContent = deaths;
+        drawStickFigure('normal');
+      }
+      
+      // Update camera/viewport
+      function updateViewport() {
+        const playerViewportX = playerX - levelOffset;
+        
+        // Move the viewport right if player approaches right edge
+        if (playerViewportX > viewportWidth * 0.6 && levelOffset < levelWidth - viewportWidth) {
+          levelOffset = playerX - (viewportWidth * 0.6);
+        }
+        
+        // Move the viewport left if player approaches left edge
+        if (playerViewportX < viewportWidth * 0.3 && levelOffset > 0) {
+          levelOffset = playerX - (viewportWidth * 0.3);
+        }
+        
+        // Clamp the level offset
+        levelOffset = Math.max(0, Math.min(levelWidth - viewportWidth, levelOffset));
+        
+        // Apply the transformation
+        levelContainer.style.left = -levelOffset + 'px';
+      }
+      
+      // Handle keyboard input
+      const keys = {};
+      
+      window.addEventListener('keydown', function(e) {
+        keys[e.key] = true;
+        
+        // Prevent default scrolling behavior
+        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
+          e.preventDefault();
+        }
+        
+        // Jump
+        if ((e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W' || e.key === ' ') && 
+            !isJumping && !isSliding && gameStarted && !gameOver && !gameWon) {
+          velocityY = -jumpStrength;
+          isJumping = true;
+          drawStickFigure('normal');
+        }
+        
+        // Slide
+        if ((e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') && 
+            !isJumping && !isSliding && gameStarted && !gameOver && !gameWon) {
+          isSliding = true;
+          drawStickFigure('sliding');
+          showActionIndicator('SLIDING');
+        }
+        
+        // Dive (pressing down while jumping)
+        if ((e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') && 
+            isJumping && !isDiving && gameStarted && !gameOver && !gameWon) {
+          isDiving = true;
+          isJumping = true;
+          velocityY = 15; // Fast downward velocity
+          drawStickFigure('diving');
+          showActionIndicator('DIVING');
+        }
+      });
+      
+      window.addEventListener('keyup', function(e) {
+        keys[e.key] = false;
+        
+        // End sliding when key is released
+        if ((e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') && isSliding) {
+          isSliding = false;
+          drawStickFigure('normal');
+        }
+      });
+      
+      // Main game loop
+      function gameLoop() {
+        if (!gameStarted || gameOver || gameWon) return;
+        
+        // Handle horizontal movement
+        velocityX = 0;
+        if ((keys['ArrowLeft'] || keys['a'] || keys['A']) && playerX > 0) {
+          velocityX = isSliding ? -slideSpeed : -playerSpeed;
+        }
+        if ((keys['ArrowRight'] || keys['d'] || keys['D']) && playerX < levelWidth - playerWidth) {
+          velocityX = isSliding ? slideSpeed : playerSpeed;
+        }
+        
+        // Apply gravity if jumping or falling
+        if (isJumping || isDiving) {
+          velocityY += gravity;
+        }
+        
+        // Update position
+        playerX += velocityX;
+        playerY += velocityY;
+        
+        // Check boundaries
+        if (playerX < 0) playerX = 0;
+        if (playerX > levelWidth - playerWidth) playerX = levelWidth - playerWidth;
+        
+        // Check collisions
+        const onPlatform = checkCollision();
+        
+        // End diving if on ground
+        if (isDiving && onPlatform) {
+          isDiving = false;
+          drawStickFigure('normal');
+        }
+        
+        // End sliding if not pressing down
+        if (isSliding && !keys['ArrowDown'] && !keys['s'] && !keys['S']) {
+          isSliding = false;
+          drawStickFigure('normal');
+        }
+        
+        // Update viewport/camera
+        updateViewport();
+        
+        // Update player position
+        player.style.left = (playerX - levelOffset) + 'px';
+        player.style.top = playerY + 'px';
+        
+        // Check for win
+        if (gameWon) {
+          winScreen.style.display = 'flex';
+          finalDeaths.textContent = deaths;
+          return;
+        }
+        
+        // Request next frame
+        requestAnimationFrame(gameLoop);
+      }
+      
+      // Initialize game
+      function initGame() {
+        // Clear existing elements
+        levelContainer.innerHTML = '';
+        
+        // Reset game state
+        playerX = 50;
+        playerY = 0;
+        velocityX = 0;
+        velocityY = 0;
+        isJumping = false;
+        isSliding = false;
+        isDiving = false;
+        deaths = 0;
+        gameOver = false;
+        gameWon = false;
+        levelOffset = 0;
+        deathCounter.textContent = deaths;
+        
+        // Draw player
+        drawStickFigure('normal');
+        
+        // Create level
+        createLevel();
+        
+        // Update viewport
+        updateViewport();
+        
+        // Start game loop
+        requestAnimationFrame(gameLoop);
+      }
+      
+      // Event listeners for buttons
+      startButton.addEventListener('click', function() {
+        startScreen.style.display = 'none';
+        gameStarted = true;
+        initGame();
+      });
+      
+      restartButton.addEventListener('click', function() {
+        gameOverScreen.style.display = 'none';
+        initGame();
+      });
+      
+      playAgainButton.addEventListener('click', function() {
+        winScreen.style.display = 'none';
+        initGame();
+      });
+      
+      // Draw initial stick figure
+      drawStickFigure('normal');
+    });
+  </script>
+</body>
+</html>
